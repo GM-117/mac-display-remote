@@ -36,6 +36,8 @@ cd mac-display-remote
 
 iPhone Safari 打开安装脚本打印的地址(形如 `http://你的Mac.local:8977`),首次输入 Token,即可熄屏 / 亮屏 / 查看屏幕状态,页面每 5 秒自动刷新状态。
 
+**添加到主屏幕(推荐)**:在 Safari 中点「分享」→「添加到主屏幕」,即可像 App 一样从桌面图标全屏打开(深色月牙图标、独立窗口、无地址栏)。注意:主屏幕版与 Safari 的记忆相互独立,首次打开需再输入一次 Token。
+
 ### 方式 B:iOS 快捷指令 + Siri(推荐)
 
 手机 Safari 打开控制页(需已输入 Token),点击「添加『Mac 熄屏』」/「添加『Mac 亮屏』」,快捷指令文件会自动下载(页面已预生成,基本秒下),然后:
@@ -100,12 +102,14 @@ python3 server.py   # 前台运行,Ctrl+C 停止
 
 ```
 mac-display-remote/
-├── server.py          # 服务端:HTTP API + 控制页(仅标准库)
-├── static/index.html  # 手机控制页
-├── install.sh         # 一键安装(LaunchAgent 开机自启)
-├── uninstall.sh       # 卸载
-├── config.json        # 运行时自动生成:端口 + token(勿提交)
-├── logs/              # 服务日志(mac-display-remote.log,勿提交)
+├── server.py                  # 服务端:HTTP API + 控制页 + PWA 资源(仅标准库)
+├── static/index.html          # 手机控制页
+├── static/manifest.webmanifest # PWA 清单(添加到主屏幕)
+├── static/icon-*.png          # PWA 图标(180/192/512)
+├── install.sh                 # 一键安装(LaunchAgent 开机自启)
+├── uninstall.sh               # 卸载
+├── config.json                # 运行时自动生成:端口 + token(勿提交)
+├── logs/                      # 服务日志(mac-display-remote.log,勿提交)
 └── README.md
 ```
 

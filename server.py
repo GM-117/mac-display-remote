@@ -26,6 +26,14 @@ BASE_DIR = Path(__file__).resolve().parent
 CONFIG_PATH = BASE_DIR / "config.json"
 INDEX_PATH = BASE_DIR / "static" / "index.html"
 
+# PWA 静态资源:添加到主屏幕所需的清单与图标
+STATIC_FILES = {
+    "/manifest.webmanifest": ("static/manifest.webmanifest", "application/manifest+json"),
+    "/icon-180.png": ("static/icon-180.png", "image/png"),
+    "/icon-192.png": ("static/icon-192.png", "image/png"),
+    "/icon-512.png": ("static/icon-512.png", "image/png"),
+}
+
 PMSET = "/usr/bin/pmset"
 CAFFEINATE = "/usr/bin/caffeinate"
 
@@ -261,6 +269,20 @@ class Handler(BaseHTTPRequestHandler):
         self.send_response(200)
         self.send_header("Content-Type", "text/html; charset=utf-8")
         self.send_header("Content-Length", str(len(body)))
+        # 每次打开都拉最新页面,避免功能更新后主屏幕版拿到旧缓存
+        self.send_header("Cache-Control", "no-cache")
+        self.end_headers()
+        self.wfile.write(body)
+
+    def _send_static(self, relpath: str, ctype: str):
+        path = BASE_DIR / relpath
+        if not path.exists():
+            return self._send_json(404, {"error": "not found"})
+        body = path.read_bytes()
+        self.send_response(200)
+        self.send_header("Content-Type", ctype)
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "public, max-age=86400")
         self.end_headers()
         self.wfile.write(body)
 
@@ -283,6 +305,9 @@ class Handler(BaseHTTPRequestHandler):
         path, _, query = self.path.partition("?")
         if path in ("/", "/index.html"):
             return self._send_html()
+        if path in STATIC_FILES:
+            relpath, ctype = STATIC_FILES[path]
+            return self._send_static(relpath, ctype)
         if path == "/health":  # 连通性探测,不含敏感信息,无需鉴权
             return self._send_json(200, {"ok": True, "service": "mac-display-remote"})
         if path == "/api/status":
