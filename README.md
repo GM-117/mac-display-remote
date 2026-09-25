@@ -91,6 +91,9 @@ python3 server.py   # 前台运行,Ctrl+C 停止
   `launchctl kickstart -k gui/$(id -u)/com.gaomeng.mac-display-remote`
 - **Token 每次启动会变吗?** 不会。Token 只在首次运行(无 `config.json`)时随机生成并写入 `config.json`,之后固定不变;只有删除 / 清空 `config.json`(下次启动重新生成)、文件损坏,或手动编辑其中的 `token` 字段时才会变化。
 - **合盖使用注意?** 合盖外接显示器(clamshell)时请保持外接电源,否则系统会整体睡眠、服务失联。这也是把"系统睡眠"设计为主动触发接口的原因——平时只熄屏,想让它睡再让它睡。
+- **想停止服务?** 不要直接 kill 进程——LaunchAgent 配了 `KeepAlive`,launchd 会立刻把服务拉起。临时停止(下次登录/重启仍会自启,期间手机端失联):
+  `launchctl unload ~/Library/LaunchAgents/com.gaomeng.mac-display-remote.plist`
+  恢复运行把 `unload` 换成 `load` 执行同一命令即可;想彻底停用并移除开机自启,跑 `./uninstall.sh`(`config.json` 与 `logs/` 保留,重装后 Token 不变)。
 - **卸载?** `./uninstall.sh`,配置与日志会保留。
 
 ## 目录结构
