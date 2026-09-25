@@ -44,6 +44,12 @@
     background: #1b1b22; color: #c7c7d1; font-size: 14px;
     font-weight: 500; padding: 16px 8px; border: 1px solid #2c2c36; border-radius: 16px;
   }
+  .spinner {
+    flex: none; width: 15px; height: 15px; border-radius: 50%;
+    border: 2px solid rgba(255,255,255,.3); border-top-color: #fff;
+    animation: spin .8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
   .hint { font-size: 12px; color: #6c6c76; text-align: center; line-height: 1.7; max-width: 420px; margin: 0; }
   .guide {
     width: 100%; max-width: 420px; background: #1b1b22; border: 1px solid #2c2c36;
@@ -138,16 +144,50 @@ async function act(path, confirmText) {
   setTimeout(() => document.querySelectorAll("button.act").forEach(b => b.disabled = false), 1500);
 }
 
+// 记录按钮原始内容,便于加载结束后恢复
+const scOriginalHTML = { sleep: $("btn-sc-sleep").innerHTML, wake: $("btn-sc-wake").innerHTML };
+const shortcutBlobs = {};  // 预取的签名文件,kind -> Blob
+
+function setShortcutLoading(kind, on) {
+  const btn = $("btn-sc-" + kind);
+  btn.disabled = on;
+  btn.innerHTML = on ? '<span class="spinner"></span>正在准备文件…' : scOriginalHTML[kind];
+}
+
+function shortcutName(kind) { return kind === "sleep" ? "Mac 熄屏" : "Mac 亮屏"; }
+
+function shortcutUrl(kind) {
+  return "/api/shortcut/" + encodeURIComponent(shortcutName(kind) + ".shortcut")
+    + "?t=" + encodeURIComponent(token);
+}
+
+// 页面打开时后台预取签名文件:点击时零等待
+async function prewarmShortcuts() {
+  await Promise.all(["sleep", "wake"].map(async kind => {
+    try {
+      const res = await fetch(shortcutUrl(kind));
+      if (res.ok) shortcutBlobs[kind] = await res.blob();
+    } catch {}
+  }));
+}
+
 async function installShortcut(kind) {
-  if (!token) { token = prompt("请先输入访问 Token:") || ""; if (!token) return; localStorage.setItem("mdr_token", token); }
-  const name = kind === "sleep" ? "Mac 熄屏" : "Mac 亮屏";
-  const url = "/api/shortcut/" + encodeURIComponent(name + ".shortcut") + "?t=" + encodeURIComponent(token);
+  if (!token) { token = prompt("请先输入访问 Token:") || ""; if (!token) return; localStorage.setItem("mdr_token", token); prewarmShortcuts(); }
+  const btn = $("btn-sc-" + kind);
+  if (btn.disabled) return;  // 正在准备中,防重复点击
+  setShortcutLoading(kind, true);
+  const name = shortcutName(kind);
   try {
-    // 先校验文件可正常下载,再交给 Safari 存入「下载项」,由「文件」App 导入;
-    // iOS 26 已禁用 shortcuts://import-shortcut 跳转导入,故不用 URL scheme
-    const res = await fetch(url);
-    if (!res.ok) throw new Error("HTTP " + res.status);
-    const blob = await res.blob();
+    let blob = shortcutBlobs[kind];
+    if (!blob) {  // 预取未完成时现场取一次
+      const res = await fetch(shortcutUrl(kind));
+      if (!res.ok) throw new Error("HTTP " + res.status);
+      blob = await res.blob();
+      shortcutBlobs[kind] = blob;
+    }
+    // iOS 26 已禁用 shortcuts://import-shortcut 跳转导入,浏览器沙箱不允许网页
+    // 自动"打开"文件,系统分享面板也无「快捷指令」入口(实测),故直接下载,
+    // 由用户从下载项/「文件」App 点开导入
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
     a.download = name + ".shortcut";
@@ -161,6 +201,8 @@ async function installShortcut(kind) {
     $("guide").scrollIntoView({ behavior: "smooth", block: "center" });
   } catch (e) {
     alert("快捷指令下载失败,请重试(" + e.message + ")");
+  } finally {
+    setShortcutLoading(kind, false);
   }
 }
 
@@ -176,6 +218,7 @@ if (!token) {
 }
 refresh();
 setInterval(refresh, 5000);
+if (token) prewarmShortcuts();
 </script>
 </body>
 </html>

@@ -18,7 +18,6 @@ import socket
 import subprocess
 import tempfile
 import threading
-import uuid
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, quote, unquote
@@ -149,23 +148,15 @@ class ShortcutError(Exception):
     pass
 
 
-def _shortcut_action_url(url: str) -> dict:
-    return {
-        "WFWorkflowActionIdentifier": "is.workflow.actions.geturl",
-        "WFWorkflowActionParameters": {
-            "UUID": str(uuid.uuid4()).upper(),
-            "WFURLActionURL": url,
-        },
-    }
-
-
-def _shortcut_action_download(url_uuid: str) -> dict:
+def _shortcut_action_download(url: str) -> dict:
+    # iOS 26 已不识别独立的"URL"动作(is.workflow.actions.geturl),
+    # 故接口地址直接内联进"获取 URL 内容"的 WFURL 文本参数,单动作最稳
     return {
         "WFWorkflowActionIdentifier": "is.workflow.actions.downloadurl",
         "WFWorkflowActionParameters": {
             "WFURL": {
-                "Value": {"OutputName": "URL", "OutputUUID": url_uuid, "Type": "ActionOutput"},
-                "WFSerializationType": "WFActionOutputVariable",
+                "Value": {"string": url},
+                "WFSerializationType": "WFTextTokenString",
             },
             "WFHTTPMethod": "POST",
             "WFHTTPHeaders": {
@@ -192,7 +183,6 @@ def _shortcut_action_download(url_uuid: str) -> dict:
 
 def _unsigned_shortcut(kind: str, base_url: str) -> bytes:
     spec = SHORTCUT_DEFS[kind]
-    url_uuid = str(uuid.uuid4()).upper()
     workflow = {
         "WFWorkflowClientVersion": "2038.0.2.4",
         "WFWorkflowMinimumClientVersion": 900,
@@ -213,8 +203,7 @@ def _unsigned_shortcut(kind: str, base_url: str) -> bytes:
         "WFWorkflowHasShortcutInputVariables": False,
         "WFWorkflowOutputContentItemClasses": [],
         "WFWorkflowActions": [
-            _shortcut_action_url(f"{base_url}{spec['path']}"),
-            _shortcut_action_download(url_uuid),
+            _shortcut_action_download(f"{base_url}{spec['path']}"),
         ],
     }
     return plistlib.dumps(workflow, fmt=plistlib.FMT_BINARY)
