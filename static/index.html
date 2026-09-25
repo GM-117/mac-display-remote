@@ -1,0 +1,181 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Mac 屏幕遥控</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  body {
+    margin: 0; min-height: 100vh; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 26px;
+    background: #101014; color: #e8e8ee;
+    font-family: -apple-system, "PingFang SC", sans-serif; padding: 24px;
+  }
+  h1 { font-size: 22px; font-weight: 600; margin: 0; }
+  .status {
+    display: flex; align-items: center; gap: 10px;
+    background: #1b1b22; border-radius: 999px; padding: 10px 20px; font-size: 15px;
+  }
+  .dot { width: 10px; height: 10px; border-radius: 50%; background: #555; }
+  .dot.on { background: #34c759; box-shadow: 0 0 8px rgba(52, 199, 89, .55); }
+  .dot.off { background: #8e8e93; }
+  .dot.unknown { background: #ff9f0a; }
+  .grid { display: grid; grid-template-columns: 1fr; gap: 16px; width: 100%; max-width: 420px; }
+  button {
+    display: flex; align-items: center; justify-content: center; gap: 10px;
+    border: 0; border-radius: 18px; padding: 22px 0; font-size: 17px; font-weight: 600;
+    color: #fff; cursor: pointer; transition: transform .1s, opacity .2s;
+  }
+  button svg { flex: none; }
+  button:active { transform: scale(.96); }
+  button:disabled { opacity: .45; }
+  #btn-sleep { background: linear-gradient(135deg, #3a3a44, #26262e); }
+  #btn-wake  { background: linear-gradient(135deg, #2f6fed, #1d4fd7); }
+  #btn-sys   { background: linear-gradient(135deg, #6b2d33, #472025); }
+  .divider {
+    display: flex; align-items: center; gap: 12px;
+    width: 100%; max-width: 420px; color: #6c6c76; font-size: 12px;
+  }
+  .divider::before, .divider::after { content: ""; flex: 1; height: 1px; background: #26262e; }
+  .shortcut-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; width: 100%; max-width: 420px; }
+  .shortcut-grid button {
+    background: #1b1b22; color: #c7c7d1; font-size: 14px;
+    font-weight: 500; padding: 16px 8px; border: 1px solid #2c2c36; border-radius: 16px;
+  }
+  .hint { font-size: 12px; color: #6c6c76; text-align: center; line-height: 1.7; max-width: 420px; margin: 0; }
+  .guide {
+    width: 100%; max-width: 420px; background: #1b1b22; border: 1px solid #2c2c36;
+    border-radius: 14px; padding: 14px 16px; font-size: 13px; color: #c7c7d1;
+    line-height: 1.8; margin: 0;
+  }
+  .guide-title {
+    margin: 0; color: #e8e8ee; font-weight: 600;
+  }
+  .guide-title svg { vertical-align: -3px; margin-right: 6px; }
+  .guide ol { margin: 6px 0 0; padding-left: 18px; }
+</style>
+</head>
+<body>
+  <h1>Mac 屏幕遥控</h1>
+  <div class="status"><span id="dot" class="dot"></span><span id="status-text">连接中…</span></div>
+  <div class="grid">
+    <button id="btn-sleep" class="act">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+      熄屏
+    </button>
+    <button id="btn-wake" class="act">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+      亮屏
+    </button>
+    <button id="btn-sys" class="act">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"/><line x1="12" y1="2" x2="12" y2="12"/></svg>
+      系统睡眠
+    </button>
+  </div>
+  <div class="divider">Siri 快捷指令</div>
+  <div class="shortcut-grid">
+    <button id="btn-sc-sleep">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+      添加「Mac 熄屏」
+    </button>
+    <button id="btn-sc-wake">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+      添加「Mac 亮屏」
+    </button>
+  </div>
+  <p class="hint">
+    安装后对 Siri 说「嘿 Siri,Mac 熄屏」/「嘿 Siri,Mac 亮屏」。<br />
+    亮屏后停在锁屏界面属正常现象;建议用 Safari 打开本页安装快捷指令。
+  </p>
+  <div id="guide" class="guide" hidden>
+    <p class="guide-title">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+      已开始下载「<span id="guide-name"></span>.shortcut」,按下面步骤安装:
+    </p>
+    <ol>
+      <li>点 Safari 地址栏旁的<b>下载图标</b>,点按刚下载的文件(或打开「文件」App →「下载项」)</li>
+      <li>在预览页点右下角<b>添加快捷指令</b></li>
+      <li>对 Siri 说「嘿 Siri,<span id="guide-phrase"></span>」试试</li>
+    </ol>
+  </div>
+<script>
+let token = localStorage.getItem("mdr_token");
+const $ = (id) => document.getElementById(id);
+
+async function api(path, method = "GET") {
+  const res = await fetch(path, { method, headers: { "X-Auth-Token": token } });
+  if (res.status === 401) {
+    token = prompt("Token 无效或未填写,请输入访问 Token:");
+    if (!token) throw new Error("unauthorized");
+    localStorage.setItem("mdr_token", token);
+    return api(path, method);
+  }
+  return res.json();
+}
+
+function renderStatus(data) {
+  const asleep = data.display_asleep;
+  $("dot").className = "dot " + (asleep === true ? "off" : asleep === false ? "on" : "unknown");
+  $("status-text").textContent = data.status_text || "状态未知";
+}
+
+async function refresh() {
+  try {
+    renderStatus(await api("/api/status"));
+  } catch {
+    $("status-text").textContent = "连接失败";
+    $("dot").className = "dot unknown";
+  }
+}
+
+async function act(path, confirmText) {
+  if (confirmText && !confirm(confirmText)) return;
+  document.querySelectorAll("button.act").forEach(b => b.disabled = true);
+  try { await api(path, "POST"); } catch {}
+  setTimeout(refresh, 1200);
+  setTimeout(() => document.querySelectorAll("button.act").forEach(b => b.disabled = false), 1500);
+}
+
+async function installShortcut(kind) {
+  if (!token) { token = prompt("请先输入访问 Token:") || ""; if (!token) return; localStorage.setItem("mdr_token", token); }
+  const name = kind === "sleep" ? "Mac 熄屏" : "Mac 亮屏";
+  const url = "/api/shortcut/" + encodeURIComponent(name + ".shortcut") + "?t=" + encodeURIComponent(token);
+  try {
+    // 先校验文件可正常下载,再交给 Safari 存入「下载项」,由「文件」App 导入;
+    // iOS 26 已禁用 shortcuts://import-shortcut 跳转导入,故不用 URL scheme
+    const res = await fetch(url);
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    const blob = await res.blob();
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = name + ".shortcut";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 10000);
+    $("guide-name").textContent = name;
+    $("guide-phrase").textContent = name;
+    $("guide").hidden = false;
+    $("guide").scrollIntoView({ behavior: "smooth", block: "center" });
+  } catch (e) {
+    alert("快捷指令下载失败,请重试(" + e.message + ")");
+  }
+}
+
+$("btn-sleep").onclick = () => act("/api/display/sleep");
+$("btn-wake").onclick = () => act("/api/display/wake");
+$("btn-sys").onclick = () => act("/api/system/sleep", "系统睡眠会暂停所有正在运行的任务,确定继续?");
+$("btn-sc-sleep").onclick = () => installShortcut("sleep");
+$("btn-sc-wake").onclick = () => installShortcut("wake");
+
+if (!token) {
+  token = prompt("首次使用,请输入访问 Token:");
+  if (token) localStorage.setItem("mdr_token", token);
+}
+refresh();
+setInterval(refresh, 5000);
+</script>
+</body>
+</html>

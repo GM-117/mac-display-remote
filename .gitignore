@@ -1,0 +1,8 @@
+# 访问凭据,不要提交到任何仓库
+config.json
+
+# 运行产物
+__pycache__/
+logs/
+*.log
+.DS_Store
