@@ -13,6 +13,7 @@
 <style>
   :root { color-scheme: dark; }
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { overscroll-behavior-y: contain; }
   body {
     margin: 0; min-height: 100vh; display: flex; flex-direction: column;
     align-items: center; justify-content: center; gap: 26px;
@@ -32,6 +33,33 @@
   .dot.on { background: #34c759; box-shadow: 0 0 8px rgba(52, 199, 89, .55); }
   .dot.off { background: #8e8e93; }
   .dot.unknown { background: #ff9f0a; }
+  .offline-banner {
+    width: 100%; max-width: 420px;
+    background: rgba(255, 159, 10, 0.08);
+    border: 1px solid rgba(255, 159, 10, 0.28);
+    border-radius: 18px; padding: 16px 18px;
+    display: flex; flex-direction: column; gap: 12px;
+    animation: fadeIn .2s ease-out;
+  }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: translateY(0); } }
+  .offline-banner-title {
+    display: flex; align-items: center; gap: 8px;
+    font-size: 15px; font-weight: 600; color: #ff9f0a; margin: 0;
+  }
+  .offline-banner-title svg { flex: none; }
+  .offline-banner-desc {
+    font-size: 13px; color: #c7c7d1; line-height: 1.6; margin: 0;
+  }
+  .offline-banner-desc b { color: #fff; }
+  .btn-retry {
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+    width: 100%; padding: 13px 0; font-size: 14px; font-weight: 600;
+    border-radius: 13px; background: #26262f; color: #fff;
+    border: 1px solid #3c3c4a; cursor: pointer; transition: transform .1s, opacity .2s;
+  }
+  .btn-retry:active { transform: scale(.97); }
+  .btn-retry:disabled { opacity: .6; }
+  .offline-mode button.act { opacity: .4; pointer-events: none; }
   .grid { display: grid; grid-template-columns: 1fr; gap: 16px; width: 100%; max-width: 420px; }
   button {
     display: flex; align-items: center; justify-content: center; gap: 10px;
@@ -76,6 +104,19 @@
 <body>
   <h1>Mac 屏幕遥控</h1>
   <div class="status"><span id="dot" class="dot"></span><span id="status-text">连接中…</span></div>
+  <div id="offline-banner" class="offline-banner" hidden>
+    <div class="offline-banner-title">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+      未连接到 Mac 局域网
+    </div>
+    <p class="offline-banner-desc">
+      当前设备可能未与 Mac 连接在同一个 Wi-Fi。<b>请勿下拉刷新页面</b>（可能导致白屏无法载入），连回 Wi-Fi 后会自动恢复。
+    </p>
+    <button id="btn-retry" class="btn-retry">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
+      重试连接
+    </button>
+  </div>
   <div class="grid">
     <button id="btn-sleep" class="act">
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
@@ -120,15 +161,47 @@
 let token = localStorage.getItem("mdr_token");
 const $ = (id) => document.getElementById(id);
 
-async function api(path, method = "GET") {
-  const res = await fetch(path, { method, headers: { "X-Auth-Token": token } });
-  if (res.status === 401) {
-    token = prompt("Token 无效或未填写,请输入访问 Token:");
-    if (!token) throw new Error("unauthorized");
-    localStorage.setItem("mdr_token", token);
-    return api(path, method);
+let failCount = 0;
+let isOffline = false;
+
+function preventUnload(e) {
+  e.preventDefault();
+  return (e.returnValue = "当前未连接到 Mac，刷新可能导致页面无法重新载入。确定要刷新吗？");
+}
+
+function setOfflineState(offline) {
+  if (isOffline === offline) return;
+  isOffline = offline;
+  $("offline-banner").hidden = !offline;
+  document.body.classList.toggle("offline-mode", offline);
+  if (offline) {
+    window.addEventListener("beforeunload", preventUnload);
+  } else {
+    window.removeEventListener("beforeunload", preventUnload);
   }
-  return res.json();
+}
+
+async function api(path, method = "GET", timeoutMs = 4000) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await fetch(path, {
+      method,
+      headers: { "X-Auth-Token": token },
+      signal: controller.signal,
+    });
+    clearTimeout(timer);
+    if (res.status === 401) {
+      token = prompt("Token 无效或未填写,请输入访问 Token:");
+      if (!token) throw new Error("unauthorized");
+      localStorage.setItem("mdr_token", token);
+      return api(path, method, timeoutMs);
+    }
+    return res.json();
+  } catch (err) {
+    clearTimeout(timer);
+    throw err;
+  }
 }
 
 function renderStatus(data) {
@@ -139,10 +212,17 @@ function renderStatus(data) {
 
 async function refresh() {
   try {
-    renderStatus(await api("/api/status"));
+    const data = await api("/api/status");
+    renderStatus(data);
+    failCount = 0;
+    setOfflineState(false);
   } catch {
+    failCount++;
     $("status-text").textContent = "连接失败";
     $("dot").className = "dot unknown";
+    if (failCount >= 2 || !navigator.onLine) {
+      setOfflineState(true);
+    }
   }
 }
 
@@ -221,6 +301,32 @@ $("btn-wake").onclick = () => act("/api/display/wake");
 $("btn-sys").onclick = () => act("/api/system/sleep", "系统睡眠会暂停所有正在运行的任务,确定继续?");
 $("btn-sc-sleep").onclick = () => installShortcut("sleep");
 $("btn-sc-wake").onclick = () => installShortcut("wake");
+
+$("btn-retry").onclick = async () => {
+  const btn = $("btn-retry");
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span>正在重试连接…';
+  try {
+    const data = await api("/api/status", "GET", 3000);
+    renderStatus(data);
+    failCount = 0;
+    setOfflineState(false);
+  } catch {
+    failCount = 2;
+    setOfflineState(true);
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>重试连接`;
+  }
+};
+
+window.addEventListener("online", () => {
+  refresh();
+});
+window.addEventListener("offline", () => {
+  failCount = 2;
+  setOfflineState(true);
+});
 
 if (!token) {
   token = prompt("首次使用,请输入访问 Token:");

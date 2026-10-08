@@ -91,7 +91,8 @@ python3 server.py   # 前台运行,Ctrl+C 停止
 - **手机打不开页面?** ① 确认手机与 Mac 在同一 WiFi;② 个别路由器开启了"AP 隔离"会拦截设备互访,需在路由器后台关闭;③ `.local` 域名解析失败时,可在"系统设置 → Wi-Fi → 详细信息"里查 Mac 的局域网 IP,直接用 IP 访问。
 - **想改端口或 Token?** 编辑 `config.json` 后重启服务:
   `launchctl kickstart -k gui/$(id -u)/com.gaomeng.mac-display-remote`
-- **Token 每次启动会变吗?** 不会。Token 只在首次运行(无 `config.json`)时随机生成并写入 `config.json`,之后固定不变;只有删除 / 清空 `config.json`(下次启动重新生成)、文件损坏,或手动编辑其中的 `token` 字段时才会变化。
+- **Token 每次启动会变吗?为什么有时会再次弹出输入框?** 不会改变。Token 只在首次运行(无 `config.json`)时随机生成并写入 `config.json`,之后固定不变。再次弹窗通常是因为:① **入口不同**:Safari 网页端与「添加到主屏幕(PWA)」拥有各自完全独立的存储空间,在新的入口打开需各输一次;② **访问地址变了**:例如上次用 IP 访问,这次用 `.local` 访问,浏览器同源策略将其视为不同站点;③ 误用了无痕浏览或清理了网站数据。
+- **不在同一 Wi-Fi 局域网时访问会怎样?** 页面会自动检测并弹出「未连接到 Mac 局域网」警告卡片,操作按钮自动置灰保护,并拦截下拉误刷新(离线下拉刷新会导致 Safari 变成空白错误页)。重新连上 Wi-Fi 后点击卡片上的「重试连接」即可免刷新恢复。在外网时若需快速遥控,建议直接使用配置好的 Siri 快捷指令(系统会明确弹窗提示是否连通),或通过 Tailscale 组网。
 - **合盖使用注意?** 合盖外接显示器(clamshell)时请保持外接电源,否则系统会整体睡眠、服务失联。这也是把"系统睡眠"设计为主动触发接口的原因——平时只熄屏,想让它睡再让它睡。
 - **想停止服务?** 不要直接 kill 进程——LaunchAgent 配了 `KeepAlive`,launchd 会立刻把服务拉起。临时停止(下次登录/重启仍会自启,期间手机端失联):
   `launchctl unload ~/Library/LaunchAgents/com.gaomeng.mac-display-remote.plist`
