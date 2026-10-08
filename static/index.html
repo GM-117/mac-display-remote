@@ -34,12 +34,16 @@
   .dot.off { background: #8e8e93; }
   .dot.unknown { background: #ff9f0a; }
   .offline-banner {
+    display: none;
     width: 100%; max-width: 420px;
     background: rgba(255, 159, 10, 0.08);
     border: 1px solid rgba(255, 159, 10, 0.28);
     border-radius: 18px; padding: 16px 18px;
-    display: flex; flex-direction: column; gap: 12px;
+    flex-direction: column; gap: 12px;
     animation: fadeIn .2s ease-out;
+  }
+  .offline-banner.show {
+    display: flex;
   }
   @keyframes fadeIn { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: translateY(0); } }
   .offline-banner-title {
@@ -104,7 +108,7 @@
 <body>
   <h1>Mac 屏幕遥控</h1>
   <div class="status"><span id="dot" class="dot"></span><span id="status-text">连接中…</span></div>
-  <div id="offline-banner" class="offline-banner" hidden>
+  <div id="offline-banner" class="offline-banner">
     <div class="offline-banner-title">
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
       未连接到 Mac 局域网
@@ -172,7 +176,7 @@ function preventUnload(e) {
 function setOfflineState(offline) {
   if (isOffline === offline) return;
   isOffline = offline;
-  $("offline-banner").hidden = !offline;
+  $("offline-banner").classList.toggle("show", offline);
   document.body.classList.toggle("offline-mode", offline);
   if (offline) {
     window.addEventListener("beforeunload", preventUnload);
