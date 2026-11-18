@@ -355,6 +355,15 @@ class Handler(BaseHTTPRequestHandler):
             return self._send_json(200, {"ok": system_sleep(), "action": "system_sleep"})
         return self._send_json(404, {"error": "not found"})
 
+    def log_request(self, code="-", size="-"):
+        # 快捷指令下载接口用 ?t=<token> 携带凭据,访问日志必须去掉查询串,
+        # 否则 token 会以明文写进日志(外网访问时风险更高)
+        requestline = self.requestline or ""
+        line = requestline.split("?", 1)[0]
+        if "?" in requestline and " HTTP/" in requestline:
+            line += " HTTP/" + requestline.split(" HTTP/", 1)[1]
+        print(f'[{self.log_date_time_string()}] {self.address_string()} "{line}" {code} {size}')
+
     def log_message(self, fmt, *args):
         print(f"[{self.log_date_time_string()}] {self.address_string()} {fmt % args}")
 

@@ -1,6 +1,6 @@
 # mac-display-remote 🖥️📱
 
-局域网内用 iPhone 遥控 Mac 显示器的**熄屏 / 亮屏**。
+局域网内用 iPhone 遥控 Mac 显示器的**熄屏 / 亮屏**;可选接入云服务器中转,人在外网也能控制。
 
 人在客厅或床上,Mac 在书房跑任务:不想专门走过去关屏幕,手机点一下"熄屏",任务照常跑;想回电脑前看结果之前,手机点一下"亮屏"。也可以绑定 Siri,说一句"嘿 Siri,关闭电脑屏幕"。
 
@@ -79,6 +79,57 @@ Token 已自动写入快捷指令内,无需手动填。之后对 Siri 说:
 
 鉴权方式:请求头 `X-Auth-Token: <token>`(快捷指令下载接口用查询参数 `?t=<token>`)。
 
+## 外网访问(华为云 frp)
+
+默认只在局域网可用。注意:**熄屏 / 亮屏必须调用 macOS 本机接口(`pmset`、`caffeinate`、CoreGraphics),不能把 `server.py` 搬到云服务器上**;正确做法是 Mac 主动外连云服务器,由云服务器做公网入口(frp 反向代理),请求再从隧道回到 Mac。
+
+> 本次实际部署的环境、参数与验证记录见 [deploy/README.md](deploy/README.md)。
+
+```
+iPhone(任意网络) ──> http://<云公网IP>:18977
+                            │  华为云 frps:只做转发,不执行任何控制逻辑
+                            ▼
+                     frpc ←── Mac 主动外连(无需公网 IP / 路由器端口映射)
+                            ▼
+                     server.py ──> pmset / caffeinate
+```
+
+### 1. 云端(华为云 Linux)
+
+```bash
+scp deploy/cloud/install-frps.sh root@<云服务器IP>:/root/
+ssh root@<云服务器IP>
+sudo bash /root/install-frps.sh
+```
+
+脚本会安装 frps、随机生成隧道 Token、注册 systemd 开机自启,最后打印公网 IP、控制端口(默认 47000)、对外端口(默认 18977)和 Token。两台机器都会从 GitHub release 下载 frp,下载不畅时可先手动下载,再用 `FRP_PKG_URL=file:///path/to/frp.tar.gz` 指向本地包。
+
+然后到华为云控制台 → 服务器安全组,放行 **TCP 47000**(frp 隧道)与 **TCP 18977**(手机访问)。刻意不用 80/443:既避免备案要求,也避开公网扫描重灾区。
+
+### 2. Mac 端
+
+```bash
+./deploy/mac/install-frpc.sh --server <云服务器IP> --token <隧道Token>
+```
+
+脚本会下载 frpc、写入 `~/.config/frp/frpc.toml`、注册 LaunchAgent(开机自启、崩溃自动拉起),并检查本机服务与隧道进程。
+
+### 3. 手机端
+
+任意网络打开 `http://<云服务器IP>:18977`,输入 `config.json` 里的访问 Token 即可。
+
+Siri 快捷指令需要**从这个公网地址重新生成一次**:快捷指令里的接口地址取自下载请求的 Host 头(见 `server.py:336`),从公网入口生成的快捷指令会自动指向公网地址,之后在外网也能用 Siri。
+
+> 局域网地址(`http://Mac.local:8977`)仍然有效。两个入口属于不同站点,Token 各记一次;外网入口打不开时可退回局域网入口。
+
+### 说明与限制
+
+- **Mac 必须保持开机联网**:熄屏不影响网络;合盖外接显示器时需接电源,否则整机睡眠会失联,此时任何入口都无法唤醒屏幕。
+- **公网是明文 HTTP**:访问 Token 会明文经过运营商网络。个人使用风险可控;如果以后有已备案域名,建议加 nginx + HTTPS。项目附 `deploy/cloud/nginx-mac-display.conf`,可做可选限流,并把访问日志里的 `?t=<token>` 抹掉。
+- **访问日志已脱敏**:`server.py` 的访问日志会去掉查询串,避免快捷指令 Token 落盘。
+- **云服务器只做转发**:不需要装 Python 服务,1 核 1G 足够;页面打开时每 5 秒轮询一次,月流量约几十 MB。
+- **回滚**:`./deploy/mac/install-frpc.sh --uninstall` 只移除 Mac 端隧道,局域网访问不受影响。
+
 ## 手动运行(调试)
 
 ```bash
@@ -92,7 +143,7 @@ python3 server.py   # 前台运行,Ctrl+C 停止
 - **想改端口或 Token?** 编辑 `config.json` 后重启服务:
   `launchctl kickstart -k gui/$(id -u)/com.gaomeng.mac-display-remote`
 - **Token 每次启动会变吗?为什么有时会再次弹出输入框?** 不会改变。Token 只在首次运行(无 `config.json`)时随机生成并写入 `config.json`,之后固定不变。再次弹窗通常是因为:① **入口不同**:Safari 网页端与「添加到主屏幕(PWA)」拥有各自完全独立的存储空间,在新的入口打开需各输一次;② **访问地址变了**:例如上次用 IP 访问,这次用 `.local` 访问,浏览器同源策略将其视为不同站点;③ 误用了无痕浏览或清理了网站数据。
-- **不在同一 Wi-Fi 局域网时访问会怎样?** 页面会自动检测并弹出「未连接到 Mac 局域网」警告卡片,操作按钮自动置灰保护,并拦截下拉误刷新(离线下拉刷新会导致 Safari 变成空白错误页)。重新连上 Wi-Fi 后点击卡片上的「重试连接」即可免刷新恢复。在外网时若需快速遥控,建议直接使用配置好的 Siri 快捷指令(系统会明确弹窗提示是否连通),或通过 Tailscale 组网。
+- **不在同一 Wi-Fi 局域网时访问会怎样?** 未配置外网入口时,页面会自动检测并弹出「未连接到 Mac」警告卡片,操作按钮自动置灰保护,并拦截下拉误刷新(离线下拉刷新会导致 Safari 变成空白错误页);重新联网后点击卡片上的「重试连接」即可免刷新恢复。若已按上文配置华为云 frp,直接在任意网络访问公网地址即可;也可继续用配置好的 Siri 快捷指令。
 - **合盖使用注意?** 合盖外接显示器(clamshell)时请保持外接电源,否则系统会整体睡眠、服务失联。这也是把"系统睡眠"设计为主动触发接口的原因——平时只熄屏,想让它睡再让它睡。
 - **想停止服务?** 不要直接 kill 进程——LaunchAgent 配了 `KeepAlive`,launchd 会立刻把服务拉起。临时停止(下次登录/重启仍会自启,期间手机端失联):
   `launchctl unload ~/Library/LaunchAgents/com.gaomeng.mac-display-remote.plist`
@@ -109,6 +160,8 @@ mac-display-remote/
 ├── static/icon-*.png          # PWA 图标(180/192/512)
 ├── install.sh                 # 一键安装(LaunchAgent 开机自启)
 ├── uninstall.sh               # 卸载
+├── deploy/cloud/              # 云服务器中转:frps 安装脚本、可选 nginx 加固配置
+├── deploy/mac/                # Mac 端隧道:frpc 安装脚本(LaunchAgent 常驻)
 ├── config.json                # 运行时自动生成:端口 + token(勿提交)
 ├── logs/                      # 服务日志(mac-display-remote.log,勿提交)
 └── README.md
